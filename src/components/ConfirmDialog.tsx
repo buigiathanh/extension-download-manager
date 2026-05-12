@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n/I18nContext";
 
 type Props = {
   open: boolean;
@@ -17,12 +18,15 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Xác nhận",
-  cancelLabel = "Huỷ",
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useI18n();
+  const confirmText = confirmLabel ?? t("confirmDefault");
+  const cancelText = cancelLabel ?? t("confirmCancel");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -39,7 +43,7 @@ export function ConfirmDialog({
       <button
         type="button"
         className="fixed inset-0 z-[100] cursor-default bg-black/60"
-        aria-label="Đóng"
+        aria-label={t("confirmCloseAria")}
         onClick={onCancel}
       />
       <div
@@ -58,7 +62,7 @@ export function ConfirmDialog({
             className="rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-800 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
             onClick={onCancel}
           >
-            {cancelLabel}
+            {cancelText}
           </button>
           <button
             type="button"
@@ -69,7 +73,7 @@ export function ConfirmDialog({
             }
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {confirmText}
           </button>
         </div>
       </div>

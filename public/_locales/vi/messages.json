@@ -1,0 +1,14 @@
+{
+  "app_name": {
+    "message": "Download Manager",
+    "description": "Tên extension hiển thị ở chrome://extensions và Web Store."
+  },
+  "app_description": {
+    "message": "Trình quản lý tải xuống hiện đại — giao diện tối, phân thư mục thông minh, tên file có tiền tố ngày và menu tải ảnh chuột phải.",
+    "description": "Mô tả hiển thị ở chrome://extensions và Web Store."
+  },
+  "action_title": {
+    "message": "Mở Download Manager",
+    "description": "Tooltip khi rê chuột lên icon extension."
+  }
+}

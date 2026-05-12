@@ -3,132 +3,19 @@ import {
   extensionOf,
   dayKey,
   sourceHost,
-  isImageDownload,
   isBase64DataUrlDownload,
   applyDownloadDatePrefixToBaseName,
 } from "./downloads";
 import type { DownloadFolderOrganizeMode } from "./folderOrganizeSettings";
-
-/** Thư mục con ASCII — tương thích đa nền tảng. */
-export const TYPE_FOLDER = {
-  image: "Hinh-anh",
-  video: "Video",
-  document: "Tai-lieu",
-  code: "Ma-nguon",
-  software: "Phan-mem",
-  other: "Khac",
-} as const;
-
-const VIDEO_EXT = new Set([
-  "mp4",
-  "webm",
-  "mkv",
-  "mov",
-  "avi",
-  "m4v",
-  "wmv",
-  "flv",
-  "mpeg",
-  "mpg",
-  "3gp",
-  "ogv",
-]);
-
-const DOCUMENT_EXT = new Set([
-  "pdf",
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
-  "ppt",
-  "pptx",
-  "odt",
-  "ods",
-  "odp",
-  "rtf",
-  "txt",
-  "csv",
-  "md",
-  "epub",
-  "mobi",
-]);
-
-const CODE_EXT = new Set([
-  "js",
-  "mjs",
-  "cjs",
-  "ts",
-  "tsx",
-  "jsx",
-  "vue",
-  "py",
-  "rb",
-  "go",
-  "rs",
-  "java",
-  "kt",
-  "kts",
-  "swift",
-  "c",
-  "h",
-  "cpp",
-  "cc",
-  "cxx",
-  "hpp",
-  "cs",
-  "php",
-  "sql",
-  "sh",
-  "bash",
-  "zsh",
-  "ps1",
-  "bat",
-  "cmd",
-  "html",
-  "htm",
-  "css",
-  "scss",
-  "sass",
-  "less",
-  "json",
-  "xml",
-  "yaml",
-  "yml",
-  "toml",
-  "ini",
-  "env",
-  "dockerfile",
-  "gradle",
-  "properties",
-]);
-
-const SOFTWARE_EXT = new Set([
-  "exe",
-  "msi",
-  "dmg",
-  "pkg",
-  "apk",
-  "deb",
-  "rpm",
-  "appimage",
-  "iso",
-  "img",
-  "vhd",
-  "vhdx",
-  "msix",
-  "appx",
-  "jar",
-  "run",
-  "bin",
-]);
-
-export function sanitizePathSegment(raw: string): string {
-  const t = raw.trim();
-  if (!t) return "_";
-  const cleaned = t.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/^\.+$/, "_");
-  const clipped = cleaned.slice(0, 180);
-  return clipped || "_";
-}
+import type { TypeCategoryId, TypeOrganizeResolved } from "./typeOrganizeSettings";
+import { sanitizePathSegment } from "./pathSegment";
+import {
+  builtinCodeExtSet,
+  builtinDocumentExtSet,
+  builtinImageExtSet,
+  builtinSoftwareExtSet,
+  builtinVideoExtSet,
+} from "./typeBuiltinExtensions";
 
 function fileBaseNameForItem(item: chrome.downloads.DownloadItem): string {
   const fromPath = baseName(item.filename || "").trim();
@@ -144,17 +31,97 @@ function fileBaseNameForItem(item: chrome.downloads.DownloadItem): string {
   return "download";
 }
 
-export function typeFolderForDownload(item: chrome.downloads.DownloadItem): string {
+function extraHas(list: string[], ext: string): boolean {
+  return ext.length > 0 && list.includes(ext);
+}
+
+function builtinExtActive(removed: string[], ext: string, set: Set<string>): boolean {
+  return set.has(ext) && !removed.includes(ext);
+}
+
+/** Thứ tự khớp nhóm mặc định trước thư mục tùy chỉnh (trùng với `typeFolderForDownload`). */
+const BUILTIN_TYPE_ROUTE_ORDER: Array<Exclude<TypeCategoryId, "other">> = [
+  "image",
+  "video",
+  "software",
+  "document",
+  "code",
+];
+
+/**
+ * Các nhóm mặc định (không gồm Other) đang “giữ” đuôi `ext` qua danh sách built-in hoặc extra,
+ * chỉ dựa trên đuôi (không xét MIME). Dùng UI để cảnh báo: routing luôn xét các nhóm này trước thư mục tùy chỉnh.
+ */
+export function builtinCategoriesClaimingExtensionOnly(
+  ext: string,
+  typeCfg: TypeOrganizeResolved,
+): Array<Exclude<TypeCategoryId, "other">> {
+  if (!ext) return [];
+  const x = typeCfg.extraExtensions;
+  const r = typeCfg.removedBuiltinExtensions;
+  const out: Array<Exclude<TypeCategoryId, "other">> = [];
+  for (const id of BUILTIN_TYPE_ROUTE_ORDER) {
+    const set =
+      id === "image"
+        ? builtinImageExtSet
+        : id === "video"
+          ? builtinVideoExtSet
+          : id === "software"
+            ? builtinSoftwareExtSet
+            : id === "document"
+              ? builtinDocumentExtSet
+              : builtinCodeExtSet;
+    if (builtinExtActive(r[id], ext, set) || extraHas(x[id], ext)) {
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+export function typeFolderForDownload(
+  item: chrome.downloads.DownloadItem,
+  typeCfg: TypeOrganizeResolved,
+): string {
   const ext = extensionOf(item.filename || fileBaseNameForItem(item));
   const mime = (item.mime || "").toLowerCase();
+  const f = typeCfg.folderNames;
+  const x = typeCfg.extraExtensions;
+  const r = typeCfg.removedBuiltinExtensions;
 
-  if (isImageDownload(item, ext)) return TYPE_FOLDER.image;
-  if (mime.startsWith("video/") || VIDEO_EXT.has(ext)) return TYPE_FOLDER.video;
-  if (SOFTWARE_EXT.has(ext)) return TYPE_FOLDER.software;
-  if (DOCUMENT_EXT.has(ext)) return TYPE_FOLDER.document;
-  if (CODE_EXT.has(ext)) return TYPE_FOLDER.code;
-  if (mime.startsWith("text/") && ext) return TYPE_FOLDER.code;
-  return TYPE_FOLDER.other;
+  if (
+    mime.startsWith("image/") ||
+    builtinExtActive(r.image, ext, builtinImageExtSet) ||
+    extraHas(x.image, ext)
+  ) {
+    return f.image;
+  }
+  if (
+    mime.startsWith("video/") ||
+    builtinExtActive(r.video, ext, builtinVideoExtSet) ||
+    extraHas(x.video, ext)
+  ) {
+    return f.video;
+  }
+  if (builtinExtActive(r.software, ext, builtinSoftwareExtSet) || extraHas(x.software, ext)) {
+    return f.software;
+  }
+  if (builtinExtActive(r.document, ext, builtinDocumentExtSet) || extraHas(x.document, ext)) {
+    return f.document;
+  }
+  if (
+    builtinExtActive(r.code, ext, builtinCodeExtSet) ||
+    extraHas(x.code, ext) ||
+    (mime.startsWith("text/") && ext)
+  ) {
+    return f.code;
+  }
+  for (const g of typeCfg.customTypeFolders) {
+    if (g.extensions.length > 0 && g.extensions.includes(ext)) {
+      return g.folderName;
+    }
+  }
+  /* Không khớp nhóm mặc định (theo MIME/đuôi) hay thư mục tùy chỉnh → thư mục Other. */
+  return f.other;
 }
 
 function sourceFolderForDownload(item: chrome.downloads.DownloadItem): string {
@@ -181,10 +148,12 @@ export function suggestedFilenameWithDownloadTimePrefix(
 /**
  * Đường dẫn tương đối (dùng `/`) so với thư mục tải mặc định của Chrome.
  * Trả về `null` nếu không can thiệp (chế độ mặc định).
+ * `typeOrganize` chỉ dùng khi `mode === "by-type"`; caller nên luôn truyền cấu hình đã load.
  */
 export function suggestedRelativePathForOrganizeMode(
   mode: DownloadFolderOrganizeMode,
   item: chrome.downloads.DownloadItem,
+  typeOrganize: TypeOrganizeResolved,
 ): string | null {
   if (mode === "default") return null;
 
@@ -197,7 +166,7 @@ export function suggestedRelativePathForOrganizeMode(
     return `${dateFolderForDownload(item)}/${base}`;
   }
   if (mode === "by-type") {
-    return `${typeFolderForDownload(item)}/${base}`;
+    return `${typeFolderForDownload(item, typeOrganize)}/${base}`;
   }
   if (mode === "by-source") {
     return `${sourceFolderForDownload(item)}/${base}`;

@@ -4,6 +4,12 @@ import {
   type DownloadFolderOrganizeMode,
 } from "./lib/folderOrganizeSettings";
 import {
+  TYPE_ORGANIZE_STORAGE_KEY,
+  defaultTypeOrganizeResolved,
+  loadTypeOrganizeConfig,
+  type TypeOrganizeResolved,
+} from "./lib/typeOrganizeSettings";
+import {
   suggestedFilenameWithDownloadTimePrefix,
   suggestedRelativePathForOrganizeMode,
 } from "./lib/downloadPathRouting";
@@ -21,6 +27,9 @@ function managerUrl(): string {
 /** Cache chế độ phân thư mục — cập nhật khi mở extension / đổi Cài đặt. */
 let cachedOrganizeMode: DownloadFolderOrganizeMode | null = null;
 
+/** Cache tên thư mục + đuôi bổ sung theo loại file (chế độ by-type). */
+let cachedTypeOrganize: TypeOrganizeResolved | null = null;
+
 async function refreshCachedOrganizeMode(): Promise<void> {
   try {
     cachedOrganizeMode = await loadFolderOrganizeMode();
@@ -29,7 +38,16 @@ async function refreshCachedOrganizeMode(): Promise<void> {
   }
 }
 
+async function refreshCachedTypeOrganize(): Promise<void> {
+  try {
+    cachedTypeOrganize = await loadTypeOrganizeConfig();
+  } catch {
+    cachedTypeOrganize = defaultTypeOrganizeResolved();
+  }
+}
+
 void refreshCachedOrganizeMode();
+void refreshCachedTypeOrganize();
 
 attachDownloadImageContextMenuListener();
 registerDownloadImageContextMenu();
@@ -42,6 +60,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes[FOLDER_ORGANIZE_STORAGE_KEY]) {
     cachedOrganizeMode = null;
     void refreshCachedOrganizeMode();
+  }
+  if (changes[TYPE_ORGANIZE_STORAGE_KEY]) {
+    cachedTypeOrganize = null;
+    void refreshCachedTypeOrganize();
   }
 });
 
@@ -58,7 +80,11 @@ chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
         cachedOrganizeMode != null ? cachedOrganizeMode : await loadFolderOrganizeMode();
       if (cachedOrganizeMode == null) cachedOrganizeMode = mode;
 
-      const relative = suggestedRelativePathForOrganizeMode(mode, downloadItem);
+      const typeCfg =
+        cachedTypeOrganize != null ? cachedTypeOrganize : await loadTypeOrganizeConfig();
+      if (cachedTypeOrganize == null) cachedTypeOrganize = typeCfg;
+
+      const relative = suggestedRelativePathForOrganizeMode(mode, downloadItem, typeCfg);
       if (relative == null) {
         suggest({
           filename: suggestedFilenameWithDownloadTimePrefix(downloadItem),

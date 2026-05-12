@@ -4,23 +4,35 @@ import { DownloadsPanel } from "./components/DownloadsPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { LeftRail, type NavKey } from "./components/LeftRail";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { LanguageToggle } from "./components/LanguageToggle";
+import { useI18n } from "./i18n/I18nContext";
 
 export default function App() {
+  const { t } = useI18n();
   const [nav, setNav] = useState<NavKey>("files");
   const [selectedDownloadId, setSelectedDownloadId] = useState<number | null>(null);
-  const [displayName, setDisplayName] = useState("Người dùng Chrome");
-  const [accountLabel, setAccountLabel] = useState("Tài khoản cục bộ");
+  const [identityEmail, setIdentityEmail] = useState<string | null>(null);
+  const [identityId, setIdentityId] = useState<string | null>(null);
+
+  const displayName = identityEmail
+    ? identityEmail.split("@")[0] || identityEmail
+    : identityId
+      ? `${t("accountIdPrefix")} ${identityId.slice(0, 8)}…`
+      : t("accountDefaultName");
+  const accountLabel = identityEmail
+    ? t("accountLabelGoogle")
+    : identityId
+      ? t("accountLabelChromeSync")
+      : t("accountLabelLocal");
 
   useEffect(() => {
     void chrome.identity
       .getProfileUserInfo({ accountStatus: "ANY" })
       .then((info) => {
         if (info.email) {
-          setDisplayName(info.email.split("@")[0] || info.email);
-          setAccountLabel("Google");
+          setIdentityEmail(info.email);
         } else if (info.id) {
-          setDisplayName(`ID ${info.id.slice(0, 8)}…`);
-          setAccountLabel("Đồng bộ Chrome");
+          setIdentityId(info.id);
         }
       })
       .catch(() => undefined);
@@ -31,7 +43,7 @@ export default function App() {
   }, [nav]);
 
   return (
-    <div className="flex h-screen min-h-[480px] flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-200">
+    <div className="flex h-screen min-h-[480px] flex-col overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-200">
       <div className="flex min-h-0 flex-1">
         <LeftRail
           active={nav}
@@ -42,12 +54,13 @@ export default function App() {
         <div
           className={
             nav === "files"
-              ? "relative flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row"
-              : "relative flex min-h-0 min-w-0 flex-1 flex-col"
+              ? "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row"
+              : "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           }
         >
           {nav !== "files" ? (
-            <div className="absolute right-4 top-3 z-30">
+            <div className="absolute right-4 top-3 z-30 flex items-center gap-2">
+              <LanguageToggle />
               <ThemeToggle />
             </div>
           ) : null}

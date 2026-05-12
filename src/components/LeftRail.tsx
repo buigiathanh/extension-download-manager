@@ -1,4 +1,6 @@
 import { Download, Settings } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
+import type { MessageKey } from "../i18n/messages";
 
 const SOURCE_CODE_URL = "https://github.com/buigiathanh/extension-download-manager";
 
@@ -29,12 +31,13 @@ type Props = {
   accountLabel: string;
 };
 
-const modules: { key: NavKey; label: string; icon: typeof Download }[] = [
-  { key: "files", label: "Quản lý file", icon: Download },
-  { key: "settings", label: "Cài đặt", icon: Settings },
+const modules: { key: NavKey; labelKey: MessageKey; icon: typeof Download }[] = [
+  { key: "files", labelKey: "navFiles", icon: Download },
+  { key: "settings", labelKey: "navSettings", icon: Settings },
 ];
 
 export function LeftRail({ active, onNavigate, displayName, accountLabel }: Props) {
+  const { t } = useI18n();
   const initial = displayName.trim().charAt(0).toUpperCase() || "?";
 
   return (
@@ -42,16 +45,17 @@ export function LeftRail({ active, onNavigate, displayName, accountLabel }: Prop
       <div className="flex justify-center py-4">
         <img
           src={chrome.runtime.getURL("icons/icon-128.png")}
-          alt="Download Manager"
-          title="Download Manager"
+          alt={t("appName")}
+          title={t("appName")}
           className="h-9 w-9 rounded-lg object-contain shadow-lg shadow-black/40 ring-1 ring-white/10"
           draggable={false}
         />
       </div>
 
       <nav className="flex flex-1 flex-col items-center gap-1 px-1.5">
-        {modules.map(({ key, label, icon: Icon }) => {
+        {modules.map(({ key, labelKey, icon: Icon }) => {
           const on = active === key;
+          const label = t(labelKey);
           return (
             <button
               key={key}
@@ -75,8 +79,8 @@ export function LeftRail({ active, onNavigate, displayName, accountLabel }: Prop
       <div className="flex flex-col items-center gap-1 border-t border-zinc-200/90 py-3 dark:border-zinc-800/80">
         <button
           type="button"
-          title="Mã nguồn mở trên GitHub"
-          aria-label="Mở mã nguồn trên GitHub"
+          title={t("navOpenSource")}
+          aria-label={t("navOpenSource")}
           onClick={openSourceCode}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800 dark:text-zinc-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
@@ -85,7 +89,7 @@ export function LeftRail({ active, onNavigate, displayName, accountLabel }: Prop
         <button
           type="button"
           title={`${displayName} — ${accountLabel}`}
-          aria-label={`Tài khoản: ${displayName}`}
+          aria-label={`${t("navAccount")}: ${displayName}`}
           className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-500 to-zinc-600 text-xs font-semibold text-white ring-2 ring-zinc-200 ring-offset-0 hover:ring-zinc-400 dark:from-zinc-700 dark:to-zinc-800 dark:text-zinc-100 dark:ring-zinc-900 dark:hover:ring-zinc-600"
         >
           {initial}

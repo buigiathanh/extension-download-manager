@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Calendar, FolderOpen, FolderTree, Globe2, Settings } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Calendar, Folder, FolderDown, Globe, HelpCircle, Layers } from "lucide-react";
 import {
   DEFAULT_FOLDER_ORGANIZE_MODE,
   FOLDER_ORGANIZE_STORAGE_KEY,
@@ -10,54 +11,33 @@ import {
 import { probeChromeAskWhereToSaveLikelyEnabled } from "../lib/chromeDownloadAskLocationProbe";
 import { openChromeDownloadsSettingsTab } from "../lib/openChromeDownloadsSettings";
 import { DownloadAskLocationDialog } from "./DownloadAskLocationDialog";
-
-/** Đặt `true` khi cần bật lại thanh tab (Cài đặt folder / Chung). */
-const SETTINGS_TOP_TABS_ENABLED = false;
-
-type SettingsTabId = "folder" | "general";
-
-const tabs: { id: SettingsTabId; label: string }[] = [
-  { id: "folder", label: "Cài đặt folder" },
-  { id: "general", label: "Chung" },
-];
+import { TypeOrganizeSettingsSection } from "./TypeOrganizeSettingsSection";
+import { useI18n } from "../i18n/I18nContext";
+import type { MessageKey } from "../i18n/messages";
 
 const organizeOptions: {
   value: DownloadFolderOrganizeMode;
-  title: string;
-  description: string;
-  icon: typeof Calendar;
+  titleKey: MessageKey;
+  descKey: MessageKey;
+  Icon: LucideIcon;
 }[] = [
-  {
-    value: "default",
-    title: "Mặc định",
-    description:
-      "Giữ hành vi tải của Chrome: file vào đúng thư mục bạn đã chọn trong Cài đặt Chrome, không tạo thư mục con theo quy tắc của extension.",
-    icon: FolderOpen,
-  },
-  {
-    value: "by-date",
-    title: "Theo ngày",
-    description:
-      "Mỗi ngày một thư mục con (ví dụ 2026-05-12), dễ tìm theo thời điểm tải.",
-    icon: Calendar,
-  },
-  {
-    value: "by-type",
-    title: "Theo loại file",
-    description:
-      "Phân loại: Hình ảnh, Video, Tài liệu, Mã nguồn, Phần mềm — dựa trên phần mở rộng và loại MIME.",
-    icon: FolderTree,
-  },
-  {
-    value: "by-source",
-    title: "Theo nguồn",
-    description: "Một thư mục cho mỗi trang / hostname nơi file được tải (ví dụ example.com).",
-    icon: Globe2,
-  },
+  { value: "default", titleKey: "organizeDefault", descKey: "organizeDefaultDesc", Icon: Folder },
+  { value: "by-date", titleKey: "organizeByDate", descKey: "organizeByDateDesc", Icon: Calendar },
+  { value: "by-type", titleKey: "organizeByType", descKey: "organizeByTypeDesc", Icon: Layers },
+  { value: "by-source", titleKey: "organizeBySource", descKey: "organizeBySourceDesc", Icon: Globe },
+];
+
+type SettingsSection = "organize" | "byType" | "downloadAsk";
+
+const NAV_ITEMS: { id: SettingsSection; labelKey: MessageKey; Icon: LucideIcon }[] = [
+  { id: "organize", labelKey: "settingsNavOrganize", Icon: FolderDown },
+  { id: "byType", labelKey: "settingsNavByType", Icon: Layers },
+  { id: "downloadAsk", labelKey: "settingsNavDownloadAsk", Icon: HelpCircle },
 ];
 
 export function SettingsPanel() {
-  const [activeTab, setActiveTab] = useState<SettingsTabId>("folder");
+  const { t } = useI18n();
+  const [activeSection, setActiveSection] = useState<SettingsSection>("organize");
   const [organizeMode, setOrganizeMode] = useState<DownloadFolderOrganizeMode>(
     DEFAULT_FOLDER_ORGANIZE_MODE,
   );
@@ -156,183 +136,177 @@ export function SettingsPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
       <DownloadAskLocationDialog
         open={askLocationDialogOpen}
-        title="Nhắc tắt hỏi vị trí trước khi lưu"
-        message="Chrome có thể đang bật hỏi vị trí lưu trước khi tải. Phân thư mục theo ngày, loại hoặc nguồn chỉ áp dụng được khi tùy chọn đó đã tắt trong Cài đặt Chrome."
-        alreadyOffLabel="Tôi đã tắt"
-        openSettingsLabel="Mở cài đặt"
-        cancelLabel="Huỷ"
+        title={t("askLocationTitle")}
+        message={t("askLocationMessage")}
+        alreadyOffLabel={t("askLocationAlreadyOff")}
+        openSettingsLabel={t("askLocationOpenSettings")}
+        cancelLabel={t("askLocationCancel")}
         onAlreadyOff={() => void handleAskLocationDialogAlreadyOff()}
         onOpenSettings={() => void handleAskLocationDialogOpenSettings()}
         onCancel={() => void handleAskLocationDialogCancel()}
       />
       <header className="shrink-0 border-b border-zinc-200/90 bg-white/95 px-6 py-5 backdrop-blur-sm dark:border-zinc-800/80 dark:bg-zinc-950/95">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/15 to-cyan-600/10 ring-1 ring-violet-500/25">
-            <Settings className="h-5 w-5 text-violet-600 dark:text-violet-400" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-              Cài đặt
-            </h1>
-            <p className="mt-0.5 max-w-xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-500">
-              Tuỳ chỉnh cách tổ chức tải xuống và các tuỳ chọn chung của extension.
-            </p>
-          </div>
-        </div>
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          {t("settingsTitle")}
+        </h1>
+      </header>
 
-        {SETTINGS_TOP_TABS_ENABLED ? (
-          <div
-            className="mt-5 flex w-full max-w-2xl gap-1 rounded-xl bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80 dark:bg-zinc-900/60 dark:ring-zinc-800/80"
-            role="tablist"
-            aria-label="Nhóm cài đặt"
-          >
-            {tabs.map(({ id, label }) => {
-              const on = activeTab === id;
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="shrink-0 border-b border-zinc-200 bg-white/95 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/95 md:w-72 md:border-b-0 md:border-r md:px-4 md:py-4">
+          <nav className="flex gap-1 overflow-x-auto pb-0.5 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
+            {NAV_ITEMS.map(({ id, labelKey, Icon }) => {
+              const on = activeSection === id;
               return (
                 <button
                   key={id}
                   type="button"
-                  role="tab"
-                  aria-selected={on}
-                  id={`settings-tab-${id}`}
-                  aria-controls={`settings-panel-${id}`}
-                  onClick={() => setActiveTab(id)}
-                  className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 ${
+                  onClick={() => setActiveSection(id)}
+                  className={`flex min-w-0 items-center gap-3 rounded-lg px-2.5 py-2.5 text-left text-[13px] font-medium transition md:w-full ${
                     on
-                      ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-zinc-700/80"
-                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-200"
+                      ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900/80"
                   }`}
                 >
-                  {label}
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                      on
+                        ? "border-zinc-300/90 bg-white text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-100"
+                        : "border-zinc-200/90 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400"
+                    }`}
+                    aria-hidden
+                  >
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.85} />
+                  </span>
+                  <span className="min-w-0 leading-snug">{t(labelKey)}</span>
                 </button>
               );
             })}
-          </div>
-        ) : null}
-      </header>
+          </nav>
+        </aside>
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-        {SETTINGS_TOP_TABS_ENABLED && activeTab === "general" ? (
-          <section
-            role="tabpanel"
-            id="settings-panel-general"
-            aria-labelledby="settings-tab-general"
-            className="mx-auto max-w-2xl"
-          >
-            <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Chung</h2>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-500">
-              Giao diện sáng / tối có thể bật bằng nút góc phải trên trang. Các mục như thông báo
-              hoặc đồng bộ sẽ bổ sung ở đây khi có.
-            </p>
-          </section>
-        ) : (
-          <section
-            role={SETTINGS_TOP_TABS_ENABLED ? "tabpanel" : undefined}
-            id={SETTINGS_TOP_TABS_ENABLED ? "settings-panel-folder" : undefined}
-            aria-labelledby={SETTINGS_TOP_TABS_ENABLED ? "settings-tab-folder" : undefined}
-            className="mx-auto max-w-2xl"
-          >
-            <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-              Cách phân thư mục khi tải
-            </h2>
-            <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-500">
-              Mỗi lựa chọn quyết định Chrome đặt file vào thư mục con nào trong thư mục tải mặc định: theo
-              ngày tải, theo loại nội dung, hoặc theo hostname nguồn. Chế độ Mặc định không thêm thư mục
-              con — đường dẫn theo đúng cấu hình tải của Chrome.
-            </p>
-            {organizeMode !== "default" ? (
-              <div className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
-                <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100/95">
-                  Hãy tắt{" "}
-                  <strong className="font-semibold text-amber-950 dark:text-amber-50">
-                    Hỏi vị trí lưu tệp trước khi tải xuống
-                  </strong>{" "}
-                  trong phần Tải xuống nếu bạn vẫn bật.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void openChromeDownloadsSettingsTab()}
-                  className="self-start rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 dark:bg-amber-700 dark:hover:bg-amber-600"
-                >
-                  Mở Cài đặt Tải xuống (Chrome)
-                </button>
-              </div>
-            ) : null}
-
-            {organizeProbeBusy ? (
-              <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-500" aria-live="polite">
-                Đang kiểm tra cài đặt tải xuống của Chrome…
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-5 md:px-6">
+          {activeSection === "organize" ? (
+            <section className="mx-auto max-w-2xl">
+              <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                {t("settingsOrganizeSectionTitle")}
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {t("settingsOrganizeSectionLead")}
               </p>
-            ) : null}
+              {organizeMode !== "default" ? (
+                <div className="mt-4 flex flex-col gap-2 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
+                  <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100/95">
+                    {t("settingsOrganizeAskWarning")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void openChromeDownloadsSettingsTab()}
+                    className="self-start rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 dark:bg-amber-700 dark:hover:bg-amber-600"
+                  >
+                    {t("settingsOrganizeOpenChromeBtn")}
+                  </button>
+                </div>
+              ) : null}
 
-            {loading ? (
-              <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-500">Đang tải…</p>
-            ) : (
-              <ul className="mt-6 flex flex-col gap-3" aria-label="Tuỳ chọn phân thư mục">
-                {organizeOptions.map(({ value, title, description, icon: Icon }) => {
-                  const selected = organizeMode === value;
-                  return (
-                    <li key={value}>
-                      <button
-                        type="button"
-                        disabled={organizeProbeBusy || loading}
-                        onClick={() => void selectOrganize(value)}
-                        className={`flex w-full gap-4 rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/45 disabled:pointer-events-none disabled:opacity-60 ${
-                          selected
-                            ? "border-cyan-500/40 bg-cyan-50/80 ring-1 ring-cyan-500/25 dark:border-cyan-500/35 dark:bg-cyan-950/25 dark:ring-cyan-500/20"
-                            : "border-zinc-200 bg-white/90 hover:border-zinc-300 hover:bg-white dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/95"
-                        }`}
-                      >
-                        <span
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${
+              {organizeProbeBusy ? (
+                <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-500" aria-live="polite">
+                  {t("settingsOrganizeProbing")}
+                </p>
+              ) : null}
+
+              {loading ? (
+                <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-500">{t("settingsLoading")}</p>
+              ) : (
+                <ul className="mt-6 flex flex-col gap-3" aria-label={t("settingsOrganizeOptionsAria")}>
+                  {organizeOptions.map(({ value, titleKey, descKey, Icon }) => {
+                    const selected = organizeMode === value;
+                    return (
+                      <li key={value}>
+                        <button
+                          type="button"
+                          disabled={organizeProbeBusy || loading}
+                          onClick={() => void selectOrganize(value)}
+                          className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/45 disabled:pointer-events-none disabled:opacity-60 ${
                             selected
-                              ? "bg-cyan-500/15 text-cyan-700 ring-cyan-500/25 dark:text-cyan-300"
-                              : "bg-zinc-100 text-zinc-600 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700/80"
+                              ? "border-cyan-500/40 bg-cyan-50/80 ring-1 ring-cyan-500/25 dark:border-cyan-500/35 dark:bg-cyan-950/25 dark:ring-cyan-500/20"
+                              : "border-zinc-200 bg-white/90 hover:border-zinc-300 hover:bg-white dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/95"
                           }`}
-                          aria-hidden
                         >
-                          <Icon className="h-5 w-5" strokeWidth={1.75} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2">
-                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                              {title}
-                            </span>
-                            {selected ? (
-                              <span className="rounded-full bg-cyan-600/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-800 dark:text-cyan-300">
-                                Đang dùng
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="mt-1 block text-sm leading-relaxed text-zinc-600 dark:text-zinc-500">
-                            {description}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 items-center pt-1">
                           <span
-                            className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
                               selected
-                                ? "border-cyan-600 bg-cyan-600 dark:border-cyan-500 dark:bg-cyan-500"
-                                : "border-zinc-300 bg-white dark:border-zinc-600 dark:bg-zinc-900"
+                                ? "border-cyan-500/35 bg-cyan-100/80 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-950/50 dark:text-cyan-200"
+                                : "border-zinc-200/90 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
                             }`}
                             aria-hidden
                           >
-                            {selected ? (
-                              <span className="h-2 w-2 rounded-full bg-white dark:bg-zinc-950" />
-                            ) : null}
+                            <Icon className="h-5 w-5" strokeWidth={1.75} />
                           </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        )}
+                          <span className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                                {t(titleKey)}
+                              </span>
+                              {selected ? (
+                                <span className="rounded-full bg-cyan-600/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-800 dark:text-cyan-300">
+                                  {t("settingsBadgeActive")}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                              {t(descKey)}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center pt-0.5">
+                            <span
+                              className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                                selected
+                                  ? "border-cyan-600 bg-cyan-600 dark:border-cyan-500 dark:bg-cyan-500"
+                                  : "border-zinc-300 bg-white dark:border-zinc-600 dark:bg-zinc-900"
+                              }`}
+                              aria-hidden
+                            >
+                              {selected ? (
+                                <span className="h-2 w-2 rounded-full bg-white dark:bg-zinc-950" />
+                              ) : null}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          ) : null}
+
+          {activeSection === "byType" ? (
+            <div className="mx-auto max-w-2xl">
+              <TypeOrganizeSettingsSection embedded />
+            </div>
+          ) : null}
+
+          {activeSection === "downloadAsk" ? (
+            <section className="mx-auto max-w-2xl">
+              <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                {t("settingsDownloadAskSectionTitle")}
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {t("settingsDownloadAskSectionLead")}
+              </p>
+              <button
+                type="button"
+                onClick={() => void openChromeDownloadsSettingsTab()}
+                className="mt-5 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                {t("settingsDownloadAskOpenButton")}
+              </button>
+            </section>
+          ) : null}
+        </div>
       </div>
     </div>
   );

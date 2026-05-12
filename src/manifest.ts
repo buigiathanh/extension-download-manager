@@ -2,9 +2,10 @@ import { defineManifest } from "@crxjs/vite-plugin";
 
 export default defineManifest({
   manifest_version: 3,
-  name: "Download Manager",
+  name: "__MSG_app_name__",
   version: "1.0.0",
-  description: "Quản lý tải xuống Chrome — giao diện tối, lọc và nhóm theo ngày.",
+  description: "__MSG_app_description__",
+  default_locale: "en",
   permissions: [
     "downloads",
     "contextMenus",
@@ -27,7 +28,7 @@ export default defineManifest({
     "128": "icons/icon-128.png",
   },
   action: {
-    default_title: "Mở Download Manager",
+    default_title: "__MSG_action_title__",
     default_icon: {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

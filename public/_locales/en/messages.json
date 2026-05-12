@@ -1,0 +1,14 @@
+{
+  "app_name": {
+    "message": "Download Manager",
+    "description": "Extension name shown in chrome://extensions and the Web Store."
+  },
+  "app_description": {
+    "message": "Modern downloads manager — dark UI, smart folders, date prefix and right-click image saving.",
+    "description": "Extension description shown in chrome://extensions and the Web Store."
+  },
+  "action_title": {
+    "message": "Open Download Manager",
+    "description": "Tooltip shown when hovering the toolbar action."
+  }
+}

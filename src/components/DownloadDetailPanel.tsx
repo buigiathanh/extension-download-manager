@@ -22,6 +22,7 @@ import {
   isDownloadFileRemovedFromDisk,
 } from "../lib/downloads";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { useI18n } from "../i18n/I18nContext";
 
 function formatBytes(n: number): string {
   if (!n) return "0 B";
@@ -35,10 +36,10 @@ function formatBytes(n: number): string {
   return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
 }
 
-function formatDate(iso?: string): string {
+function formatDate(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
+    return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(iso));
@@ -54,6 +55,7 @@ type Props = {
 };
 
 export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
+  const { t, locale } = useI18n();
   const [item, setItem] = useState<chrome.downloads.DownloadItem | null>(null);
   const [destructiveDialog, setDestructiveDialog] = useState<null | "delete" | "eraseHistory">(
     null,
@@ -119,17 +121,17 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
     return (
       <aside className="flex h-full min-h-0 w-full max-w-[380px] shrink-0 flex-col border-zinc-200 bg-zinc-50 max-lg:border-t dark:border-zinc-800 dark:bg-zinc-950 lg:border-l">
         <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          <span className="text-xs font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">Chi tiết</span>
+          <span className="text-xs font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">{t("detailSectionLabel")}</span>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-            aria-label="Đóng panel"
+            aria-label={t("detailClosePanel")}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="p-4 text-sm text-zinc-600 dark:text-zinc-500">Không tìm thấy mục tải xuống.</p>
+        <p className="p-4 text-sm text-zinc-600 dark:text-zinc-500">{t("detailNotFound")}</p>
       </aside>
     );
   }
@@ -154,7 +156,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
   return (
     <>
     <aside
-      title={fileRemovedFromDisk ? "File đã xoá khỏi máy" : undefined}
+      title={fileRemovedFromDisk ? t("rowFileRemovedTitle") : undefined}
       className={`flex h-full min-h-0 w-full max-w-[380px] shrink-0 flex-col border-zinc-200 bg-zinc-50 max-lg:border-t dark:border-zinc-800 dark:bg-zinc-950 lg:border-l ${
         fileRemovedFromDisk
           ? "opacity-[0.88] transition-opacity hover:opacity-100"
@@ -164,7 +166,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
       <div className="flex items-start justify-between gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-            {formatDate(item.startTime)}
+            {formatDate(item.startTime, locale)}
           </p>
           <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-xs text-zinc-600 dark:text-zinc-600">
             {showSourceGlobe ? (
@@ -177,7 +179,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
           type="button"
           onClick={onClose}
           className="shrink-0 rounded-md p-1.5 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-          aria-label="Đóng panel"
+          aria-label={t("detailClosePanel")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -191,7 +193,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
                 <img
                   key={`${item.id}-${previewStep}-${activePreviewSrc.slice(0, 48)}`}
                   src={activePreviewSrc}
-                  alt={`Xem trước ${name}`}
+                  alt={t("detailPreviewAlt", { name })}
                   referrerPolicy="no-referrer"
                   className="h-auto w-auto max-h-[min(50vh,320px)] max-w-full object-contain"
                   onError={() =>
@@ -203,18 +205,18 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
                 />
               ) : previewStep >= previewSources.length && !iconResolved ? (
                 <p className="animate-pulse px-3 py-6 text-center text-xs text-zinc-600 dark:text-zinc-500">
-                  Đang tải xem trước…
+                  {t("detailPreviewLoading")}
                 </p>
               ) : (
                 <p className="px-3 py-6 text-center text-xs text-zinc-600 dark:text-zinc-500">
-                  Không thể hiển thị xem trước ảnh.
+                  {t("detailPreviewUnavailable")}
                 </p>
               )}
             </div>
             <p className="border-t border-zinc-200 px-3 py-1.5 text-center text-[10px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-500">
               {previewStep >= previewSources.length && iconPreviewUrl
-                ? "Xem trước (ảnh thu nhỏ hệ thống)"
-                : "Xem trước"}
+                ? t("detailPreviewCaptionSystemThumb")
+                : t("detailPreviewCaption")}
             </p>
           </div>
         ) : null}
@@ -225,7 +227,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
               ? "text-zinc-500/85 blur-[0.4px] contrast-[0.92]"
               : "text-zinc-900 dark:text-white"
           }`}
-          title={fileRemovedFromDisk ? "File đã xoá khỏi máy" : undefined}
+          title={fileRemovedFromDisk ? t("rowFileRemovedTitle") : undefined}
         >
           {name}
         </h2>
@@ -236,7 +238,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
         <div className="mt-6 space-y-4">
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-              Đường dẫn cục bộ
+              {t("detailPathLabel")}
             </label>
             <div className="mt-1.5 flex min-h-[2.25rem] items-stretch overflow-hidden rounded-lg border border-zinc-200 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/80">
               <input
@@ -246,8 +248,8 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
               />
               <button
                 type="button"
-                title="Hiện file trong thư mục"
-                aria-label="Hiện file trong thư mục"
+                title={t("detailRevealInFolder")}
+                aria-label={t("detailRevealInFolder")}
                 disabled={!canOpenLocalFile}
                 onClick={() => void chrome.downloads.show(item.id)}
                 className="flex shrink-0 items-center justify-center border-l border-zinc-200 px-2.5 text-zinc-600 transition hover:bg-zinc-100 hover:text-cyan-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-600 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-cyan-400 dark:disabled:hover:text-zinc-400"
@@ -258,7 +260,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
           </div>
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-              URL
+              {t("detailUrlLabel")}
             </label>
             <div className="mt-1.5 flex min-h-[2.25rem] items-stretch overflow-hidden rounded-lg border border-zinc-200 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/80">
               <input
@@ -268,8 +270,8 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
               />
               <button
                 type="button"
-                title="Mở URL trong tab mới"
-                aria-label="Mở URL trong tab mới"
+                title={t("detailOpenUrlNewTab")}
+                aria-label={t("detailOpenUrlNewTab")}
                 disabled={!canOpenSourceUrl}
                 onClick={() => {
                   if (!canOpenSourceUrl) return;
@@ -283,7 +285,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
           </div>
 
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">Thẻ</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">{t("detailTagsLabel")}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {ext ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
@@ -304,7 +306,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
 
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
-              Tệp đính kèm
+              {t("detailAttachmentLabel")}
             </p>
             <div className="mt-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-100/50 p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
               <div className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white/90 px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-900/80">
@@ -315,7 +317,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
                         ? "inline-block max-w-full text-zinc-500/85 blur-[0.4px] contrast-[0.92]"
                         : "text-zinc-800 dark:text-zinc-200"
                     }`}
-                    title={fileRemovedFromDisk ? "File đã xoá khỏi máy" : undefined}
+                    title={fileRemovedFromDisk ? t("rowFileRemovedTitle") : undefined}
                   >
                     {name}
                   </p>
@@ -323,7 +325,7 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
                 </div>
                 <button
                   type="button"
-                  title="Mở trong thư mục"
+                  title={t("detailOpenInFolder")}
                   onClick={() => void chrome.downloads.show(item.id)}
                   className="shrink-0 rounded-md p-2 text-zinc-600 hover:bg-zinc-200 hover:text-cyan-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-cyan-400"
                 >
@@ -345,23 +347,23 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
               className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-100 py-2 text-xs font-medium text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Mở URL
+              {t("detailOpenUrl")}
             </a>
           )}
           <button
             type="button"
             onClick={() => setDestructiveDialog("eraseHistory")}
             className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-100 py-2 text-xs font-medium text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
-            title="Chỉ xoá khỏi danh sách tải xuống"
+            title={t("detailEraseHistoryTitle")}
           >
             <History className="h-3.5 w-3.5" />
-            Xoá lịch sử
+            {t("detailEraseHistoryShort")}
           </button>
           <button
             type="button"
             onClick={() => setDestructiveDialog("delete")}
             className="inline-flex items-center justify-center rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-950/70"
-            title="Xoá file và lịch sử"
+            title={t("detailDeleteFileTitle")}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -370,14 +372,14 @@ export function DownloadDetailPanel({ downloadId, onClose, onDeleted }: Props) {
     </aside>
     <ConfirmDialog
       open={destructiveDialog !== null}
-      title={destructiveDialog === "eraseHistory" ? "Xoá khỏi lịch sử?" : "Xoá mục tải xuống?"}
+      title={destructiveDialog === "eraseHistory" ? t("confirmEraseHistoryTitle") : t("confirmDeleteSingleTitle")}
       message={
         destructiveDialog === "eraseHistory"
-          ? `Chỉ xoá “${name}” khỏi danh sách tải xuống của Chrome. File trên máy (nếu còn) không bị xoá.`
-          : `Xoá “${name}” khỏi lịch sử và file trên máy (nếu còn)?`
+          ? t("confirmEraseHistorySingleMessage", { name })
+          : t("confirmDeleteSingleMessage", { name })
       }
-      confirmLabel={destructiveDialog === "eraseHistory" ? "Xoá khỏi lịch sử" : "Xoá"}
-      cancelLabel="Huỷ"
+      confirmLabel={destructiveDialog === "eraseHistory" ? t("confirmEraseHistoryCta") : t("confirmDelete")}
+      cancelLabel={t("confirmCancel")}
       danger={destructiveDialog === "delete"}
       onCancel={() => setDestructiveDialog(null)}
       onConfirm={() => {

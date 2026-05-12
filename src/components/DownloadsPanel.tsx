@@ -22,6 +22,7 @@ import {
   Music,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   baseName,
@@ -30,7 +31,6 @@ import {
   eraseDownloadsHistory,
   extensionOf,
   faviconUrlForHost,
-  filePresenceStatusLabel,
   isDownloadFileRemovedFromDisk,
   matchesFilePresenceFilter,
   type FilePresenceFilter,
@@ -44,6 +44,9 @@ import {
 } from "../lib/downloads";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ThemeToggle } from "./ThemeToggle";
+import { LanguageToggle } from "./LanguageToggle";
+import { useI18n } from "../i18n/I18nContext";
+import type { MessageKey } from "../i18n/messages";
 
 function formatBytes(n: number): string {
   if (!n) return "0 B";
@@ -57,10 +60,10 @@ function formatBytes(n: number): string {
   return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
 }
 
-function formatShortDate(iso?: string): string {
+function formatShortDate(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
+    return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -148,12 +151,28 @@ function filePresenceBadgeClass(d: chrome.downloads.DownloadItem): string {
   return "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400";
 }
 
-const FILE_PRESENCE_OPTIONS: { value: FilePresenceFilter; label: string }[] = [
-  { value: "all", label: "Tất cả" },
-  { value: "present", label: "Còn file trên máy" },
-  { value: "removed", label: "Đã xoá khỏi máy" },
-  { value: "downloading", label: "Đang tải" },
+const FOOTER_AUTHOR_PROFILE_URL = "https://x.com/buigiathanh2802";
+const FOOTER_SPONSOR_URL = "https://extension.vn?ref=extension_download_manager";
+
+const FILE_PRESENCE_OPTIONS: { value: FilePresenceFilter; labelKey: MessageKey }[] = [
+  { value: "all", labelKey: "presenceAll" },
+  { value: "present", labelKey: "presencePresent" },
+  { value: "removed", labelKey: "presenceRemoved" },
+  { value: "downloading", labelKey: "presenceDownloading" },
 ];
+
+function filePresenceStatusLabelI18n(
+  d: chrome.downloads.DownloadItem,
+  t: (k: MessageKey) => string,
+): string {
+  if (d.state === "in_progress") return t("presenceDownloadingShort");
+  if (isDownloadFileRemovedFromDisk(d)) return t("presenceRemovedShort");
+  if (d.state === "complete") {
+    if (d.filename && d.exists !== false) return t("presencePresent");
+    return t("presenceComplete");
+  }
+  return d.state;
+}
 
 /** Dưới `lg`: cố định khi cuộn ngang — checkbox trái, tên sau checkbox, thao tác phải. */
 const STICKY_TD_CB =
@@ -177,25 +196,25 @@ const STICKY_DAY_TD_REST =
 const ROW_MENU_MIN_WIDTH_PX = 176;
 
 /** Nhóm đuôi file cho badge nhanh (chỉ bật các đuôi đang có trong lịch sử). */
-const FORMAT_BADGE_GROUPS = [
+const FORMAT_BADGE_GROUPS: ReadonlyArray<{ id: string; labelKey: MessageKey; exts: readonly string[] }> = [
   {
     id: "image",
-    label: "Hình ảnh",
+    labelKey: "formatImage",
     exts: ["png", "jpg", "jpeg", "webp", "gif", "svg", "ico", "bmp", "heic", "avif"],
   },
   {
     id: "document",
-    label: "Tài liệu",
+    labelKey: "formatDocument",
     exts: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "csv", "md"],
   },
   {
     id: "video",
-    label: "Video",
+    labelKey: "formatVideo",
     exts: ["mp4", "webm", "mov", "mkv", "avi", "flv", "wmv", "m4v", "mpeg", "mpg"],
   },
   {
     id: "code",
-    label: "Code",
+    labelKey: "formatCode",
     exts: [
       "js",
       "ts",
@@ -224,8 +243,8 @@ const FORMAT_BADGE_GROUPS = [
       "yml",
     ],
   },
-  { id: "zip", label: "Zip", exts: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz"] },
-] as const;
+  { id: "zip", labelKey: "formatZip", exts: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz"] },
+];
 
 type Props = {
   selectedDownloadId: number | null;
@@ -233,6 +252,7 @@ type Props = {
 };
 
 export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) {
+  const { t, locale } = useI18n();
   const [raw, setRaw] = useState<chrome.downloads.DownloadItem[]>([]);
   const [query, setQuery] = useState("");
   /** Đuôi file đang lọc (rỗng = tất cả). Có thể chọn nhiều định dạng. */
@@ -245,7 +265,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
   const [presenceHeaderFilterOpen, setPresenceHeaderFilterOpen] = useState(false);
   const [presenceHeaderFilterRect, setPresenceHeaderFilterRect] = useState<DOMRect | null>(null);
   const [sourceSearchQuery, setSourceSearchQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("none");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -277,7 +297,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
   const refresh = useCallback(() => {
     if (typeof chrome === "undefined" || chrome.downloads?.search == null) {
       console.warn(
-        "[Download Manager] Không có chrome.downloads — hãy mở giao diện trong tab extension (URL bắt đầu bằng chrome-extension://…), không mở localhost trực tiếp trong Chrome.",
+        "[Download Manager] chrome.downloads unavailable — open the UI in an extension tab (chrome-extension://…), not via localhost.",
       );
       return;
     }
@@ -287,7 +307,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
         setRaw(items);
       })
       .catch((err) => {
-        console.error("[Download Manager] chrome.downloads.search thất bại:", err);
+        console.error("[Download Manager] chrome.downloads.search failed:", err);
       });
   }, []);
 
@@ -468,11 +488,29 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
         const ex = extensionOf(d.filename);
         if (!selectedExts.includes(ex)) return false;
       }
-      if (sourceFilter && sourceHost(d) !== sourceFilter) return false;
+      if (selectedSources.length > 0 && !selectedSources.includes(sourceHost(d))) return false;
       if (!matchesFilePresenceFilter(d, filePresenceFilter)) return false;
       return true;
     });
-  }, [withoutInterrupted, query, selectedExts, sourceFilter, filePresenceFilter]);
+  }, [withoutInterrupted, query, selectedExts, selectedSources, filePresenceFilter]);
+
+  const selectedSourcesSet = useMemo(() => new Set(selectedSources), [selectedSources]);
+
+  const toggleSourceFilter = useCallback((host: string) => {
+    setSelectedSources((prev) =>
+      prev.includes(host)
+        ? prev.filter((h) => h !== host)
+        : [...prev, host].sort((a, b) => a.localeCompare(b)),
+    );
+  }, []);
+
+  const clearSourceFilters = useCallback(() => setSelectedSources([]), []);
+
+  /** Nhãn ngắn cho badge — bỏ `www.`, cắt tối đa 22 ký tự. */
+  const shortHostnameLabel = useCallback((host: string): string => {
+    const trimmed = host.replace(/^www\./i, "");
+    return trimmed.length > 22 ? `${trimmed.slice(0, 21)}…` : trimmed;
+  }, []);
 
   const sorted = useMemo(
     () => sortDownloads(filtered, sortKey),
@@ -650,8 +688,9 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
 
   const renderPresenceFilterPanel = () => (
     <>
-      {FILE_PRESENCE_OPTIONS.map(({ value, label }) => {
+      {FILE_PRESENCE_OPTIONS.map(({ value, labelKey }) => {
         const on = filePresenceFilter === value;
+        const label = t(labelKey);
         return (
           <button
             key={value}
@@ -702,18 +741,19 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
         >
           {selectedExts.length === 0 ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
         </span>
-        <span className="font-medium text-zinc-800 dark:text-zinc-200">Tất cả định dạng</span>
+        <span className="font-medium text-zinc-800 dark:text-zinc-200">{t("filterAllFormats")}</span>
       </button>
       <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
         {FORMAT_BADGE_GROUPS.map((g) => {
           const available = g.exts.filter((e) => extensionOptions.includes(e));
           if (available.length === 0) return null;
           const allOn = available.every((e) => selectedExtsSet.has(e));
+          const groupLabel = t(g.labelKey);
           return (
             <button
               key={g.id}
               type="button"
-              title={`${g.label}: .${available.join(", .")}`}
+              title={`${groupLabel}: .${available.join(", .")}`}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleCategoryGroup(g);
@@ -724,14 +764,14 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   : "border-zinc-400/90 bg-zinc-200/70 text-zinc-600 hover:border-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:border-zinc-600/90 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               }`}
             >
-              {g.label}
+              {groupLabel}
             </button>
           );
         })}
       </div>
       <div className="mx-2 border-t border-zinc-200 dark:border-zinc-800" />
       {extensionOptions.length === 0 ? (
-        <p className="px-3 py-4 text-center text-xs text-zinc-600 dark:text-zinc-500">Chưa có đuôi file trong lịch sử.</p>
+        <p className="px-3 py-4 text-center text-xs text-zinc-600 dark:text-zinc-500">{t("filterNoExtensions")}</p>
       ) : (
         <ul className="ext-filter-dropdown-scroll max-h-56 overflow-y-auto py-0.5 pr-0.5">
           {extensionOptions.map((ext) => {
@@ -787,7 +827,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             type="search"
             value={sourceSearchQuery}
             onChange={(e) => setSourceSearchQuery(e.target.value)}
-            placeholder="Tìm tên miền…"
+            placeholder={t("filterSourceSearchPlaceholder")}
             className="w-full rounded-md border border-zinc-300 bg-white py-1.5 pl-8 pr-2 text-xs text-zinc-800 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:placeholder:text-zinc-600 dark:focus:border-zinc-600"
             onClick={(e) => e.stopPropagation()}
           />
@@ -796,39 +836,38 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
       <button
         type="button"
         role="option"
-        aria-selected={sourceFilter === ""}
+        aria-selected={selectedSources.length === 0}
         onClick={(e) => {
           e.stopPropagation();
-          setSourceFilter("");
-          setSourceHeaderFilterOpen(false);
+          clearSourceFilters();
         }}
         className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-xs text-zinc-700 hover:bg-zinc-200/90 dark:text-zinc-300 dark:hover:bg-zinc-800/80"
       >
         <span
           className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
-            sourceFilter === ""
+            selectedSources.length === 0
               ? "border-zinc-200 bg-white text-zinc-900 shadow-sm"
               : "border-zinc-300 bg-white dark:border-zinc-600 dark:bg-zinc-950"
           }`}
           aria-hidden
         >
-          {sourceFilter === "" ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+          {selectedSources.length === 0 ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
         </span>
-        <span className="font-medium text-zinc-800 dark:text-zinc-200">Mọi nguồn</span>
+        <span className="font-medium text-zinc-800 dark:text-zinc-200">{t("filterAllSources")}</span>
       </button>
       <div className="mx-2 border-t border-zinc-200 dark:border-zinc-800" />
       {filteredSourceOptionsForDropdown.length === 0 ? (
         <p className="px-3 py-4 text-center text-xs text-zinc-600 dark:text-zinc-500">
           {sourceOptions.length === 0
-            ? "Chưa có tên miền trong lịch sử."
-            : "Không có tên miền khớp."}
+            ? t("filterNoDomains")
+            : t("filterNoMatchingDomains")}
         </p>
       ) : (
         <ul className="ext-filter-dropdown-scroll max-h-56 overflow-y-auto py-0.5 pr-0.5">
           {filteredSourceOptionsForDropdown.map((h) => {
             const fav = faviconUrlForHost(h);
             const showGlobe = isLocalhostSourceHost(h);
-            const sel = sourceFilter === h;
+            const sel = selectedSourcesSet.has(h);
             return (
               <li key={h}>
                 <button
@@ -837,8 +876,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   aria-selected={sel}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSourceFilter(h);
-                    setSourceHeaderFilterOpen(false);
+                    toggleSourceFilter(h);
                   }}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-200/90 dark:text-zinc-300 dark:hover:bg-zinc-800/80"
                 >
@@ -902,7 +940,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
     const sourceGlobe = isLocalhostSourceHost(host) || isBase64DataUrlDownload(d);
     const progressPct = downloadProgressPercent(d);
     const fileRemovedFromDisk = isDownloadFileRemovedFromDisk(d);
-    const presenceLabel = filePresenceStatusLabel(d);
+    const presenceLabel = filePresenceStatusLabelI18n(d, t);
     const zebraBg =
       rowIndex % 2 === 0 ? "bg-white dark:bg-zinc-950" : "bg-zinc-50 dark:bg-zinc-900";
     const zebraSticky =
@@ -918,7 +956,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
       <tr
         key={d.id}
         onClick={() => onSelectDownload(d.id)}
-        title={fileRemovedFromDisk ? "File đã xoá khỏi máy" : undefined}
+        title={fileRemovedFromDisk ? t("rowFileRemovedTitle") : undefined}
         className={`group border-t border-zinc-200/90 transition dark:border-zinc-900/80 ${
           fileRemovedFromDisk
             ? `cursor-not-allowed opacity-[0.78] hover:opacity-[0.92] hover:bg-zinc-100/80 dark:hover:bg-zinc-950/75 ${
@@ -941,7 +979,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             type="button"
             role="checkbox"
             aria-checked={checked}
-            aria-label={`Chọn ${name}`}
+            aria-label={`${t("rowSelectAriaPrefix")} ${name}`}
             onClick={() => toggleSelect(d.id)}
             className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950 ${
               checked
@@ -959,8 +997,8 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
               aria-label={
                 d.state === "in_progress"
                   ? progressPct != null
-                    ? `Đang tải ${progressPct}%`
-                    : "Đang tải"
+                    ? t("rowDownloadingPercent", { pct: progressPct })
+                    : t("rowDownloading")
                   : undefined
               }
             >
@@ -980,7 +1018,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   ? "inline-block max-w-full text-zinc-500/85 blur-[0.4px] contrast-[0.92]"
                   : "text-zinc-900 dark:text-zinc-100"
               }`}
-              title={fileRemovedFromDisk ? "File đã xoá khỏi máy" : undefined}
+              title={fileRemovedFromDisk ? t("rowFileRemovedTitle") : undefined}
             >
               {name}
             </span>
@@ -992,7 +1030,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
           </div>
         </td>
         <td className="py-2.5 pr-3 align-middle text-xs text-zinc-600 tabular-nums dark:text-zinc-500">
-          {formatShortDate(d.startTime)}
+          {formatShortDate(d.startTime, locale)}
         </td>
         <td
           className={`py-2.5 pr-3 align-middle text-xs tabular-nums ${
@@ -1053,13 +1091,13 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
           <button
             type="button"
             data-row-menu-anchor={d.id}
-            title="Thêm thao tác"
+            title={t("rowMoreActions")}
             onClick={(e) => {
               e.stopPropagation();
               setRowMenuId((id) => (id === d.id ? null : d.id));
             }}
             className="rounded-md p-1.5 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-            aria-label="Menu thao tác"
+            aria-label={t("rowMoreActions")}
             aria-expanded={rowMenuId === d.id}
             aria-haspopup="menu"
           >
@@ -1071,8 +1109,76 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
       <header className="shrink-0 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+        {selectedSources.length > 0 ? (
+          <div
+            className="mb-2.5 flex flex-wrap items-center gap-1.5"
+            role="list"
+            aria-label={t("filterSelectedSourcesAria")}
+          >
+            {selectedSources.map((host) => {
+              const fav = faviconUrlForHost(host);
+              const showGlobe = isLocalhostSourceHost(host);
+              const label = shortHostnameLabel(host);
+              return (
+                <span
+                  key={host}
+                  role="listitem"
+                  title={host}
+                  className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-50/90 py-0.5 pl-1.5 pr-0.5 text-[11px] font-medium text-cyan-900 ring-1 ring-cyan-500/15 dark:border-cyan-500/40 dark:bg-cyan-950/30 dark:text-cyan-200"
+                >
+                  {showGlobe ? (
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-zinc-300/90 text-zinc-600">
+                      <Globe className="h-3 w-3" strokeWidth={2} aria-hidden />
+                    </span>
+                  ) : fav ? (
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-zinc-300/90">
+                      <img
+                        src={fav}
+                        alt=""
+                        width={12}
+                        height={12}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="h-3 w-3 object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </span>
+                  ) : (
+                    <span
+                      className="h-4 w-4 shrink-0 rounded-full bg-white ring-1 ring-zinc-300/90"
+                      aria-hidden
+                    />
+                  )}
+                  <span className="min-w-0 truncate">{label}</span>
+                  <button
+                    type="button"
+                    title={t("filterRemoveSource", { name: host })}
+                    aria-label={t("filterRemoveSource", { name: host })}
+                    onClick={() => toggleSourceFilter(host)}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-cyan-700 transition hover:bg-cyan-200/70 hover:text-cyan-900 dark:text-cyan-300 dark:hover:bg-cyan-800/40 dark:hover:text-cyan-100"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                  </button>
+                </span>
+              );
+            })}
+            {selectedSources.length > 1 ? (
+              <button
+                type="button"
+                onClick={clearSourceFilters}
+                className="ml-1 inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                {t("filterClearAllSources")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[200px] max-w-xl flex-1">
             <Search
@@ -1084,7 +1190,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Tìm file, nguồn…"
+              placeholder={t("downloadsSearchPlaceholder")}
               className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-24 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-600 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
             />
             <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 select-none items-center gap-0.5 rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-zinc-600 sm:inline-flex dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-500">
@@ -1095,7 +1201,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             {selectedIds.size > 0 ? (
               <div className="relative flex items-center gap-2" ref={bulkRef}>
                 <span className="text-xs text-zinc-600 dark:text-zinc-500">
-                  {selectedIds.size} đã chọn
+                  {selectedIds.size} {t("downloadsSelectedSuffix")}
                 </span>
                 <button
                   type="button"
@@ -1105,7 +1211,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   }}
                   className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-zinc-100 px-2.5 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
-                  Thao tác
+                  {t("downloadsBulkActions")}
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
                 {bulkOpen && (
@@ -1119,7 +1225,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                       }}
                     >
                       <History className="h-3.5 w-3.5 shrink-0" />
-                      Xoá khỏi lịch sử
+                      {t("downloadsBulkEraseHistory")}
                     </button>
                     <button
                       type="button"
@@ -1130,21 +1236,22 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                      Xoá file và lịch sử
+                      {t("downloadsBulkDeleteFiles")}
                     </button>
                   </div>
                 )}
               </div>
             ) : null}
+            <LanguageToggle />
             <ThemeToggle />
             <span className="inline-flex rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
-              Download Manager
+              {t("appName")}
             </span>
             <button
               type="button"
-              title="Thông báo (tuỳ chọn)"
+              title={t("downloadsNotifications")}
               className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-              aria-label="Thông báo"
+              aria-label={t("downloadsNotifications")}
             >
               <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
             </button>
@@ -1152,9 +1259,9 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto" ref={downloadsScrollRef}>
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto" ref={downloadsScrollRef}>
         {sorted.length === 0 ? (
-          <p className="py-16 text-center text-sm text-zinc-600 dark:text-zinc-400">Không có file phù hợp.</p>
+          <p className="py-16 text-center text-sm text-zinc-600 dark:text-zinc-400">{t("downloadsNoResults")}</p>
         ) : (
           <table
             id="downloads-file-table"
@@ -1179,7 +1286,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                     aria-checked={
                       allVisibleSelected ? true : someVisibleSelected ? "mixed" : false
                     }
-                    aria-label="Chọn tất cả file đang hiển thị"
+                    aria-label={`${t("rowSelectAriaPrefix")} *`}
                     disabled={visibleIds.length === 0}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1204,7 +1311,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   className={`min-w-0 py-2.5 pr-3 align-middle ${STICKY_TH_NAME}`}
                   scope="col"
                 >
-                  Mô tả
+                  {t("colDescription")}
                 </th>
                 <th className="w-[14%] py-2.5 pr-3 align-middle" scope="col">
                   <button
@@ -1219,9 +1326,9 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                     }}
                     className="group inline-flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-600 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-300"
                     aria-pressed={sortKey === "date-asc" || sortKey === "date-desc"}
-                    title="Theo ngày: mới nhất trước → cũ nhất trước → tắt"
+                    title={t("sortByDateTitle")}
                   >
-                    Ngày
+                    {t("colDate")}
                     {sortKey === "date-asc" ? (
                       <ArrowUp className="h-3.5 w-3.5 shrink-0 text-zinc-800 dark:text-zinc-200" strokeWidth={2.5} aria-hidden />
                     ) : sortKey === "date-desc" ? (
@@ -1248,9 +1355,9 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                     }}
                     className="group inline-flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-600 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-300"
                     aria-pressed={sortKey === "size-asc" || sortKey === "size-desc"}
-                    title="Sắp xếp theo dung lượng: lớn → nhỏ → nhỏ → lớn → tắt (khi bật sort: danh sách phẳng)"
+                    title={t("sortBySizeTitle")}
                   >
-                    Dung lượng
+                    {t("colSize")}
                     {sortKey === "size-asc" ? (
                       <ArrowUp className="h-3.5 w-3.5 shrink-0 text-zinc-800 dark:text-zinc-200" strokeWidth={2.5} aria-hidden />
                     ) : sortKey === "size-desc" ? (
@@ -1267,15 +1374,15 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                 <th className="relative w-[9%] py-2.5 pr-3 align-middle" scope="col">
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                      Loại
+                      {t("colType")}
                     </span>
                     <button
                       ref={extHeaderFilterBtnRef}
                       type="button"
                       aria-expanded={extHeaderFilterOpen}
                       aria-haspopup="listbox"
-                      aria-label="Lọc theo định dạng"
-                      title="Lọc theo loại file"
+                      aria-label={t("filterByExtAria")}
+                      title={t("filterByExtTitle")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSourceHeaderFilterOpen(false);
@@ -1295,15 +1402,15 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                 <th className="relative w-[11%] py-2.5 pr-3 align-middle" scope="col">
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                      Trạng thái
+                      {t("colStatus")}
                     </span>
                     <button
                       ref={presenceHeaderFilterBtnRef}
                       type="button"
                       aria-expanded={presenceHeaderFilterOpen}
                       aria-haspopup="listbox"
-                      aria-label="Lọc theo trạng thái file"
-                      title="Lọc theo trạng thái"
+                      aria-label={t("filterByStatusAria")}
+                      title={t("filterByStatusTitle")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setExtHeaderFilterOpen(false);
@@ -1323,15 +1430,15 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                 <th className="relative w-[11%] py-2.5 pr-3 align-middle" scope="col">
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                      Nguồn
+                      {t("colSource")}
                     </span>
                     <button
                       ref={sourceHeaderFilterBtnRef}
                       type="button"
                       aria-expanded={sourceHeaderFilterOpen}
                       aria-haspopup="listbox"
-                      aria-label="Lọc theo nguồn"
-                      title="Lọc theo tên miền"
+                      aria-label={t("filterBySourceAria")}
+                      title={t("filterBySourceTitle")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setExtHeaderFilterOpen(false);
@@ -1339,7 +1446,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                         setSourceHeaderFilterOpen((o) => !o);
                       }}
                       className={`shrink-0 rounded p-0.5 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 ${
-                        sourceHeaderFilterOpen || sourceFilter !== ""
+                        sourceHeaderFilterOpen || selectedSources.length > 0
                           ? "text-cyan-600/90 hover:text-cyan-800 dark:text-cyan-400/90 dark:hover:text-cyan-300"
                           : ""
                       }`}
@@ -1352,7 +1459,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   className={`downloads-table-action-col box-border px-2 py-2.5 text-center align-middle ${STICKY_TH_ACTION}`}
                   scope="col"
                 >
-                  <span className="sr-only">Thao tác</span>
+                  <span className="sr-only">{t("colActionsSr")}</span>
                 </th>
               </tr>
             </thead>
@@ -1379,7 +1486,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                             aria-checked={
                               allInDay ? true : someInDay ? "mixed" : false
                             }
-                            aria-label={`Chọn tất cả file trong ${formatDayHeading(day)}`}
+                            aria-label={`${t("rowSelectAriaPrefix")} ${formatDayHeading(day)}`}
                             disabled={dayIds.length === 0}
                             onClick={() => toggleSelectDayGroup(list)}
                             className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-40 dark:focus-visible:ring-offset-zinc-900 ${
@@ -1416,6 +1523,35 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
           </table>
         )}
       </div>
+      <footer className="shrink-0 border-t border-zinc-200 bg-zinc-50 px-4 py-2.5 text-center text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-500">
+        <div className="flex flex-col items-center justify-center gap-1.5 sm:flex-row sm:flex-wrap sm:gap-x-3 sm:gap-y-1">
+          <span className="inline-flex flex-wrap items-center justify-center gap-1.5">
+            <span className="text-zinc-500 dark:text-zinc-500">{t("downloadsFooterBuiltBy")}</span>
+            <a
+              href={FOOTER_AUTHOR_PROFILE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-zinc-800 underline-offset-2 transition hover:text-cyan-700 hover:underline dark:text-zinc-200 dark:hover:text-cyan-400"
+              aria-label={t("downloadsFooterAuthorLinkAria")}
+            >
+              {t("downloadsFooterAuthorName")}
+            </a>
+          </span>
+          <span className="hidden h-3 w-px shrink-0 bg-zinc-300 dark:bg-zinc-700 sm:block" aria-hidden />
+          <span className="inline-flex flex-wrap items-center justify-center gap-1">
+            <span>{t("downloadsFooterSponsorBefore")}</span>
+            <a
+              href={FOOTER_SPONSOR_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-zinc-800 underline-offset-2 transition hover:text-cyan-700 hover:underline dark:text-zinc-100 dark:hover:text-cyan-400"
+              aria-label={t("downloadsFooterSponsorLinkAria")}
+            >
+              {t("downloadsFooterSponsorBrand")}
+            </a>
+          </span>
+        </div>
+      </footer>
       {rowMenuId != null &&
         rowMenuPos &&
         rowMenuDownload &&
@@ -1424,7 +1560,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             <button
               type="button"
               className="fixed inset-0 z-[88] cursor-default"
-              aria-label="Đóng menu"
+              aria-label={t("rowCloseMenu")}
               onClick={() => setRowMenuId(null)}
             />
             <div
@@ -1441,7 +1577,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   void chrome.downloads.show(rowMenuDownload.id);
                 }}
               >
-                <FolderOpen className="h-3.5 w-3.5" /> Thư mục
+                <FolderOpen className="h-3.5 w-3.5" /> {t("rowFolder")}
               </button>
               <button
                 type="button"
@@ -1453,7 +1589,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   setDeleteConfirm({ kind: "eraseHistorySingle", id, fileLabel: label });
                 }}
               >
-                <History className="h-3.5 w-3.5" /> Xoá khỏi lịch sử
+                <History className="h-3.5 w-3.5" /> {t("rowEraseHistory")}
               </button>
               <button
                 type="button"
@@ -1465,7 +1601,7 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
                   setDeleteConfirm({ kind: "single", id, fileLabel: label });
                 }}
               >
-                <Trash2 className="h-3.5 w-3.5" /> Xoá file và lịch sử
+                <Trash2 className="h-3.5 w-3.5" /> {t("rowDeleteFileAndHistory")}
               </button>
             </div>
           </>,
@@ -1478,13 +1614,13 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             <button
               type="button"
               className="fixed inset-0 z-[78] cursor-default"
-              aria-label="Đóng lọc loại"
+              aria-label={t("rowCloseMenu")}
               onClick={() => setExtHeaderFilterOpen(false)}
             />
             <div
               ref={extHeaderFilterPanelRef}
               role="listbox"
-              aria-label="Lọc theo định dạng"
+              aria-label={t("filterByExtAria")}
               className="fixed z-[80] w-[min(100vw-2rem,300px)] rounded-lg border border-zinc-200 bg-white py-1 shadow-xl ring-1 ring-black/10 dark:border-zinc-800 dark:bg-zinc-900 dark:ring-black/40"
               style={{
                 top: headerFilterRect.bottom + 8,
@@ -1507,13 +1643,13 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             <button
               type="button"
               className="fixed inset-0 z-[78] cursor-default"
-              aria-label="Đóng lọc nguồn"
+              aria-label={t("rowCloseMenu")}
               onClick={() => setSourceHeaderFilterOpen(false)}
             />
             <div
               ref={sourceHeaderFilterPanelRef}
               role="listbox"
-              aria-label="Lọc theo nguồn"
+              aria-label={t("filterBySourceAria")}
               className="fixed z-[80] w-[min(100vw-2rem,300px)] rounded-lg border border-zinc-200 bg-white py-1 shadow-xl ring-1 ring-black/10 dark:border-zinc-800 dark:bg-zinc-900 dark:ring-black/40"
               style={{
                 top: sourceHeaderFilterRect.bottom + 8,
@@ -1536,13 +1672,13 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
             <button
               type="button"
               className="fixed inset-0 z-[78] cursor-default"
-              aria-label="Đóng lọc trạng thái"
+              aria-label={t("rowCloseMenu")}
               onClick={() => setPresenceHeaderFilterOpen(false)}
             />
             <div
               ref={presenceHeaderFilterPanelRef}
               role="listbox"
-              aria-label="Lọc theo trạng thái file"
+              aria-label={t("filterByStatusAria")}
               className="fixed z-[80] w-[min(100vw-2rem,260px)] rounded-lg border border-zinc-200 bg-white py-1 shadow-xl ring-1 ring-black/10 dark:border-zinc-800 dark:bg-zinc-900 dark:ring-black/40"
               style={{
                 top: presenceHeaderFilterRect.bottom + 8,
@@ -1562,28 +1698,28 @@ export function DownloadsPanel({ selectedDownloadId, onSelectDownload }: Props) 
         open={deleteConfirm !== null}
         title={
           deleteConfirm?.kind === "eraseHistoryBulk" || deleteConfirm?.kind === "eraseHistorySingle"
-            ? "Xoá khỏi lịch sử?"
+            ? t("confirmEraseHistoryTitle")
             : deleteConfirm?.kind === "bulk"
-              ? "Xoá nhiều mục?"
-              : "Xoá mục tải xuống?"
+              ? t("confirmDeleteBulkTitle")
+              : t("confirmDeleteSingleTitle")
         }
         message={
           deleteConfirm?.kind === "eraseHistoryBulk"
-            ? `Chỉ xoá ${deleteConfirm.ids.length} mục khỏi danh sách tải xuống của Chrome. File trên máy (nếu còn) không bị xoá.`
+            ? t("confirmEraseHistoryBulkMessage", { count: deleteConfirm.ids.length })
             : deleteConfirm?.kind === "eraseHistorySingle"
-              ? `Chỉ xoá “${deleteConfirm.fileLabel}” khỏi danh sách tải xuống. File trên máy (nếu còn) không bị xoá.`
+              ? t("confirmEraseHistorySingleMessage", { name: deleteConfirm.fileLabel })
               : deleteConfirm?.kind === "bulk"
-                ? `Xoá ${deleteConfirm.ids.length} mục đã chọn khỏi lịch sử và file trên máy (nếu còn)?`
+                ? t("confirmDeleteBulkMessage", { count: deleteConfirm.ids.length })
                 : deleteConfirm?.kind === "single"
-                  ? `Xoá “${deleteConfirm.fileLabel}” khỏi lịch sử và file trên máy (nếu còn)?`
+                  ? t("confirmDeleteSingleMessage", { name: deleteConfirm.fileLabel })
                   : ""
         }
         confirmLabel={
           deleteConfirm?.kind === "eraseHistoryBulk" || deleteConfirm?.kind === "eraseHistorySingle"
-            ? "Xoá khỏi lịch sử"
-            : "Xoá"
+            ? t("confirmEraseHistoryCta")
+            : t("confirmDelete")
         }
-        cancelLabel="Huỷ"
+        cancelLabel={t("confirmCancel")}
         danger={
           deleteConfirm?.kind === "bulk" || deleteConfirm?.kind === "single"
         }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n/I18nContext";
 
 type Props = {
   open: boolean;
@@ -24,6 +25,7 @@ export function DownloadAskLocationDialog({
   onOpenSettings,
   onCancel,
 }: Props) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +45,7 @@ export function DownloadAskLocationDialog({
       <button
         type="button"
         className="fixed inset-0 z-[100] cursor-default bg-black/60"
-        aria-label="Đóng"
+        aria-label={t("confirmCloseAria")}
         onClick={onCancel}
       />
       <div

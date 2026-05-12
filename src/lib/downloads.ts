@@ -1,3 +1,5 @@
+import { builtinImageExtSet } from "./typeBuiltinExtensions";
+
 export type SortKey =
   | "none"
   | "name-asc"
@@ -18,23 +20,10 @@ export function extensionOf(filename: string): string {
   return i > 0 ? base.slice(i + 1).toLowerCase() : "";
 }
 
-const IMAGE_EXT = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "webp",
-  "gif",
-  "svg",
-  "ico",
-  "bmp",
-  "heic",
-  "avif",
-]);
-
 export function isImageDownload(item: chrome.downloads.DownloadItem, ext: string): boolean {
   const mime = (item.mime || "").toLowerCase();
   if (mime.startsWith("image/")) return true;
-  return IMAGE_EXT.has(ext.toLowerCase());
+  return builtinImageExtSet.has(ext.toLowerCase());
 }
 
 /**

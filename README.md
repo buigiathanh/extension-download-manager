@@ -10,6 +10,7 @@ A polished Chrome / Edge / Brave extension (Manifest V3) that **replaces the def
 
 - [For users](#for-users)
   - [What you get](#what-you-get)
+  - [Screenshots](#screenshots)
   - [Install from source (no Chrome Web Store yet)](#install-from-source-no-chrome-web-store-yet)
   - [How to use it](#how-to-use-it)
   - [Filename & folder rules](#filename--folder-rules)
@@ -44,6 +45,34 @@ A polished Chrome / Edge / Brave extension (Manifest V3) that **replaces the def
 - 🖼 **Right-click → "Download Image (Download manager)"**. Works on most sites with anti-hotlink protection (Instagram, X/Twitter CDN, Pinterest, blogs that block referer-less requests) because the extension transparently re-fetches the image from inside the page's own context.
 - 🔍 **List view with filtering, sorting, grouping by day** and a detail panel for each download.
 - 🐙 **Open-source by design**. There's a GitHub button on the side rail that takes you straight to the source code.
+
+### Screenshots
+
+Below are UI captures from the extension (dark theme; the in-app language can be **English** or **Vietnamese**).
+
+**Overview** — main download list with the side rail (files / settings, GitHub, account), search, language & theme toggles, and grouped rows.
+
+<p align="center">
+  <img src="./images/screenshot-overview.png" alt="Extension Download Manager — main list and side rail" width="920" />
+</p>
+
+**Download table** — columns for description, date, size, type, status, and source; files grouped by day with sortable headers.
+
+<p align="center">
+  <img src="./images/screenshot-table.png" alt="Download Manager — full table view" width="920" />
+</p>
+
+**File detail panel** — select a row to open an inline panel with preview (when available), local path, URL, tags, and quick actions.
+
+<p align="center">
+  <img src="./images/screenshot-detail-panel.png" alt="Download Manager — detail panel beside the list" width="920" />
+</p>
+
+**Settings — folder organization** — choose default, by date, by file type, or by source; paths stay under your Chrome Downloads folder.
+
+<p align="center">
+  <img src="./images/screenshot-settings-folders.png" alt="Download Manager — folder organization settings" width="920" />
+</p>
 
 ### Install from source (no Chrome Web Store yet)
 
