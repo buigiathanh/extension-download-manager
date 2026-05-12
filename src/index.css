@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(html.dark, html.dark *));
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dropdown lọc thể loại: thanh cuộn mỏng, track xám nhạt */
+.ext-filter-dropdown-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #a1a1aa #e5e5e5;
+}
+
+.ext-filter-dropdown-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.ext-filter-dropdown-scroll::-webkit-scrollbar-track {
+  margin: 4px 0;
+  background: #e5e5e5;
+  border-radius: 9999px;
+}
+
+.ext-filter-dropdown-scroll::-webkit-scrollbar-thumb {
+  background: #a3a3a3;
+  border-radius: 9999px;
+}
+
+.ext-filter-dropdown-scroll::-webkit-scrollbar-thumb:hover {
+  background: #737373;
+}
+
+/* Popup chat: ẩn thanh cuộn, vẫn cuộn bằng con lăn / trackpad */
+.chat-message-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-message-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Cột menu thao tác ~80px (bảng full-width: phần dư vào cột Mô tả — col thứ 2 không đặt width) */
+#downloads-file-table col:last-child {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+}
+#downloads-file-table th.downloads-table-action-col,
+#downloads-file-table td.downloads-table-action-col {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  box-sizing: border-box !important;
+}
