@@ -1,6 +1,6 @@
 import { Download, Settings } from "lucide-react";
 
-const SOURCE_CODE_URL = "https://github.com/thanhbui/extension-download-manager";
+const SOURCE_CODE_URL = "https://github.com/buigiathanh/extension-download-manager";
 
 function openSourceCode(): void {
   void chrome.tabs.create({ url: SOURCE_CODE_URL });
